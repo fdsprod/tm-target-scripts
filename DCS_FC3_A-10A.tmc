@@ -1,0 +1,190 @@
+include "target.tmh"
+
+include "includes/DCS_FC3_lib.tmc"
+
+// ****************************************************************************************************************************
+// Main
+// ****************************************************************************************************************************
+int main()
+{
+    if(Init(&EventHandle)) return 1;
+
+    initCustomCommands();
+
+    // Init **************************************************************
+    Configure(&HCougar, MODE_EXCLUDED);
+    Configure(&T16000, MODE_EXCLUDED);
+    Configure(&LMFD, MODE_EXCLUDED);
+    Configure(&RMFD, MODE_EXCLUDED);
+
+    SetKBRate(50, 50);
+    SetKBLayout(KB_ENG);
+    SetShiftButton(&Joystick, S4, &Throttle, BSF, BSB, 0);
+
+    // Axes **************************************************************
+
+    MapAxis(&Joystick, JOYX, DX_X_AXIS, AXIS_NORMAL, MAP_ABSOLUTE);
+    MapAxis(&Joystick, JOYY, DX_Y_AXIS, AXIS_NORMAL, MAP_ABSOLUTE);
+    MapAxis(&Throttle, THR_RIGHT, DX_Z_AXIS, AXIS_NORMAL, MAP_ABSOLUTE);
+    MapAxis(&Throttle, THR_LEFT, DX_ZROT_AXIS, AXIS_NORMAL, MAP_ABSOLUTE);
+    MapAxis(&Throttle, THR_FC, DX_SLIDER_AXIS, AXIS_NORMAL, MAP_ABSOLUTE);
+
+    MapAxis(&Throttle, SCX, DX_XROT_AXIS, AXIS_NORMAL, MAP_ABSOLUTE);
+    MapAxis(&Throttle, SCY, DX_YROT_AXIS, AXIS_REVERSED, MAP_ABSOLUTE);
+
+    SetSCurve(&Joystick, JOYX, 0, 0, 0, 2, 0);
+    SetSCurve(&Joystick, JOYY, 0, 0, 0, 2, 0);
+    SetJCurve(&Throttle, THR_RIGHT, 80, 96);
+    SetJCurve(&Throttle, THR_LEFT, 80, 96);
+    SetSCurve(&Throttle, THR_FC, 0, 0, 0, 0, 0);
+
+    SetSCurve(&Throttle, SCX, 0, 0, 0, 0, -2);
+    SetSCurve(&Throttle, SCY, 0, 0, 0, 0, -2);
+
+    // Joystick **************************************************************
+
+    // Paddle switch
+    MapKeyR(&Joystick, S4, EXEC("resetView();")); // Resets view to F1 if external view toggled with HOTAS
+
+    // Gun trigger
+    MapKeyUMD(  &Joystick, TG1, Weapon_Fire,
+                                PULSE+Smoke,
+                                Weapon_Fire);
+    // Weapons Release Button
+    MapKeyIOUMD(&Joystick, S2,  Weapon_Release, Weapon_Release,
+                                PULSE+Refueling_Bay, Fuel_Dump,
+                                Weapon_Release, Weapon_Release);
+    // Master Mode Control Button
+    MapKeyIOUMD(&Joystick, S1,  PULSE+Launch_Permission_Override, PULSE+Cannon,
+                                PULSE+HUD_Color,                  PULSE+HUD_Color,
+                                PULSE+Launch_Permission_Override, PULSE+Cannon);
+    // Nosewheel Steering Button
+    MapKey(&Joystick, S3,       CHAIN(EXEC("autopilotDisengage();"), D(), D(), PULSE+Trim_Reset));
+
+    // Target Management Switch
+    MapKeyIO(&Joystick, H2U, PULSE+All_Labels, 0);             // ^
+    MapKey(&Joystick, H2D, PULSE+CCRP_steering_mode);          // v
+    MapKey(&Joystick, H2R, PULSE+Target_Designator_To_Center); // >
+    MapKey(&Joystick, H2L, PULSE+RWR_SPO_Mode_Select);         // <
+
+    // Data Management Switch
+    MapKeyUMD(&Joystick, H3U, ZoomInCustom,    PULSE+_Next_Waypoint__Airfield_Or_Target,   ZoomInCustom);
+    MapKeyUMD(&Joystick, H3D, ZoomOutCustom,   PULSE+_Next_Waypoint__Airfield_Or_Target,   ZoomOutCustom);
+    MapKeyUMD(&Joystick, H3R, 0,               PULSE+_1__Navigation_Modes,                 0);
+    MapKeyUMD(&Joystick, H3L, 0,               PULSE+_1__Navigation_Modes,                 0);
+
+    // Countermeasures Management Switch
+    MapKeyIO(&Joystick, H4P, PULSE+ECM, PULSE+TrackIR_center);
+    MapKey(&Joystick, H4U, EXEC("countermeasures_program(2);"));
+    MapKey(&Joystick, H4D, CHAIN(EXEC("CurrentCMProgram = 0;"), PULSE+Countermeasures_Release));
+    MapKey(&Joystick, H4L, CHAIN(EXEC("CurrentCMProgram = 0;"), PULSE+Countermeasures_Chaff_Dispense));
+    MapKey(&Joystick, H4R, CHAIN(EXEC("CurrentCMProgram = 0;"), PULSE+Countermeasures_Flares_Dispense));
+
+    // Trim Switch
+    MapKey(&Joystick, H1U, Trim_Down);
+    MapKey(&Joystick, H1D, Trim_Up);
+    MapKeyIO(&Joystick, H1L, Trim_Left_Rudder, Trim_Left);
+    MapKeyIO(&Joystick, H1R, Trim_Right_Rudder, Trim_Right);
+
+    // Throttle **************************************************************
+
+    // Mic Switch
+    MapKeyIO(&Throttle, MSP, PULSE+TrackIR_pause, PULSE+Communication_menu);
+    MapKeyIOUMD(&Throttle, MSU, 0, PULSE+Flight_Attack_air_defenses,    0, PULSE+Request_AWACS_Available_Tanker,
+                                0, PULSE+Flight_Attack_air_defenses);
+    MapKeyIOUMD(&Throttle, MSD, 0, PULSE+Flight_Attack_ground_targets,  0, PULSE+Request_AWACS_Home_Airbase,
+                                0, PULSE+Flight_Attack_ground_targets);
+    MapKeyIOUMD(&Throttle, MSR, 0, PULSE+Attack_My_Target,              0, PULSE+Toggle_Formation,
+                                0, PULSE+Attack_My_Target);
+    MapKeyIOUMD(&Throttle, MSL, 0, PULSE+Cover_Me,                      0, PULSE+Join_Up_Formation,
+                                0, PULSE+Cover_Me);
+
+    // Speedbrake
+    MapKey(&Throttle, SPDF, AirbrakeOnCustom);
+    MapKey(&Throttle, SPDM, AirbrakeOffCustom);
+    MapKeyIO(&Throttle, SPDB, PULSE+Canopy_Open_Close,
+                              AirbrakeOnCustom);
+
+    // Boat Switch
+    MapKey(&Throttle, BSF, ModeAACustom);
+    MapKey(&Throttle, BSB, ModeAGCustom);
+    MapKey(&Throttle, BSM, ModeNavCustom);
+
+    // China Hat
+    MapKeyIOUMD(&Throttle, CHF, EXEC("setExtView(F5_nearest_AC_view);"),         PULSE+Weapon_Change,
+                                EXEC("setExtView(F5_nearest_AC_view);"),         0,
+                                EXEC("setExtView(F5_nearest_AC_view);"),         PULSE+Weapon_Change);
+
+    MapKeyIOUMD(&Throttle, CHB, EXEC("setExtView(F5_Ground_hostile_view);"), PULSE+Weapon_Change,
+                                EXEC("setExtView(F5_Ground_hostile_view);"), 0,
+                                EXEC("setExtView(F5_Ground_hostile_view);"), PULSE+Weapon_Change);
+
+    // Coolie Switch
+    MapKeyIOUMD(&Throttle, CSU, 0, 0,   0, 0,   PULSE+Salvo_Mode,   PULSE+PRS_SGL_Release_Submodes_Cycle);
+    MapKeyIOUMD(&Throttle, CSD, 0, 0,   0, 0,   0,                  REXEC(RippleQtyIndex, 300, "ActKey(KEYON+PULSE+Ripple_Quantity_Select);"));
+    MapKeyIOUMD(&Throttle, CSR, 0, 0,   0, 0,   0,                  REXEC(RippleIntIndex, 250, "ActKey(KEYON+PULSE+Ripple_Interval_Increase);"));
+    MapKeyIOUMD(&Throttle, CSL, 0, 0,   0, 0,   0,                  REXEC(RippleIntIndex, 250, "ActKey(KEYON+PULSE+Ripple_Interval_Decrease);"));
+
+    // Slew Control
+    MapKeyIO(&Throttle, SC, PULSE+Target_Unlock, PULSE+Target_Lock);
+
+    // Left Throttle Button
+    MapKeyIO(&Throttle, LTB, Jettison_Weapons, EXEC("autopilotToggle();"));
+
+    // Pinky Switch
+    MapKeyIO(&Throttle, PSF, PULSE+Gear_Light_Near_Far_Off, PULSE+Navigation_lights);
+    MapKeyIO(&Throttle, PSB, PULSE+Gear_Light_Near_Far_Off, PULSE+Illumination_Cockpit);
+    MapKeyIO(&Throttle, PSM, PULSE+Gear_Light_Near_Far_Off, 0);
+
+    // Flaps
+    MapKey(&Throttle, FLAPU, FlapsUpCustom);
+    MapKey(&Throttle, FLAPM, FlapsDownCustom);
+    MapKey(&Throttle, FLAPD, FlapsLandingCustom);
+
+    // Landing Gear Horn Silence Button
+    MapKeyIO(&Throttle, LDGH, PULSE+Gear_Light_Near_Far_Off, PULSE+Audible_Warning_Reset);
+
+    // Throttle Friction Control
+    KeyAxis(&Throttle, THR_FC, 0, AXMAP2( LIST( 0, 20, 80 ), LandingGearUpCustom, 0, LandingGearDownCustom));
+
+    // APU Start
+    //
+
+    // Engine Operate
+    MapKey(&Throttle, EOLIGN, EXEC("setEngine(Left, Start, 1);"));
+    MapKey(&Throttle, EORIGN, EXEC("setEngine(Right, Start, 1);"));
+
+    MapKey(&Throttle, EOLMOTOR, EXEC("setEngine(Left, Stop);"));
+    MapKey(&Throttle, EORMOTOR, EXEC("setEngine(Right, Stop);"));
+
+    // Engine Fuel Flow
+    //
+
+    // Idle
+    MapKey(&Throttle,  IDLELON, EXEC("setEngine(Left,  Stop);"));
+    MapKeyR(&Throttle, IDLELON, EXEC("setEngine(Left,  Start);"));
+    MapKey(&Throttle,  IDLERON, EXEC("setEngine(Right, Stop);"));
+    MapKeyR(&Throttle, IDLERON, EXEC("setEngine(Right, Start);"));
+
+    // Throttle
+    KeyAxis(&Throttle, THR_LEFT, 0, AXMAP2( LIST( 0, 80, 81 ),
+        EXEC("setAfterburner(Engine_Left, 0);"), 0,
+        EXEC("setAfterburner(Engine_Left, 1);")
+    ));
+    KeyAxis(&Throttle, THR_RIGHT, 0, AXMAP2( LIST( 0, 80, 81 ),
+        EXEC("setAfterburner(Engine_Right, 0);"), 0,
+        EXEC("setAfterburner(Engine_Right, 1);")
+    ));
+
+    // EAC
+    //
+
+    // Autopilot Engage / Disengage
+    MapKey(&Throttle, APENG, EXEC("autopilotToggle();"));
+
+}
+
+int EventHandle(int type, alias o, int x)
+{
+	DefaultMapping(&o, x);
+}

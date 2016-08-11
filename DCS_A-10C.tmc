@@ -1,0 +1,191 @@
+// ****************************************************************************************************************************
+// Mostly copied from dimebug on http://www.checksix-forums.com
+// http://www.checksix-forums.com/showthread.php?t=167675
+// ****************************************************************************************************************************
+
+include "target.tmh"
+
+include "includes/DCS_A-10C_lib.tmc"
+
+
+// ****************************************************************************************************************************
+// Main
+// ****************************************************************************************************************************
+int main()
+{
+
+    // Init **************************************************************
+
+    Exclude(&Joystick);
+    Exclude(&Throttle);
+
+    // MODE_FILTERED lets the controlleres physically plugged in while launching the script
+    // Allows DCS A-10C to use its native mapping
+    Configure(&Joystick, MODE_FILTERED);
+    Configure(&Throttle, MODE_FILTERED);
+
+    if(Init(&EventHandle)) return 1;
+
+    initCustomCommands();
+
+    // TrackIR launch
+    system("spawn -w C:\\_Programmes_\\Peripheriques\\TrackIR5\\TrackIR5.exe");
+
+    SetKBRate(50, 50);
+    SetKBLayout(KB_ENG);
+
+    // Shift button ("I" layer)
+    SetShiftButton(&Joystick, S4);
+
+
+    // Joystick **************************************************************
+
+    // Axes
+    SetSCurve(&Joystick, JOYX, 0, 0, 0, 2.5, 0);
+    SetSCurve(&Joystick, JOYY, 0, 0, 0, 2.5, 0);
+
+
+    // Trim Switch
+    MapKeyIO(&Joystick, H1U, PULSE+TrackIR_center);
+    MapKeyIO(&Joystick, H1D, PULSE+TrackIR_pause);
+    MapKeyIO(&Joystick, H1R, PULSE+TrackIR_precision);
+
+    // Weapons Release Button
+    MapKeyIO(&Joystick, S2, Pause);
+
+    // Master Mode Control Button
+    MapKeyIO(&Joystick, S1, Trim_Reset);
+
+    // Target Management Switch
+    MapKeyIO(&Joystick, H2U, F1_Cockpit_view);        // ^
+    MapKeyIO(&Joystick, H2D, F5_Ground_hostile_view); // v
+    MapKeyIO(&Joystick, H2R, F5_nearest_AC_view);     // >
+    MapKeyIO(&Joystick, H2L, F8_Target_view);         // <
+
+    // Data Management Switch
+    MapKeyIO(&Joystick, H3U, F1_Cockpit_view);          // ^
+    MapKeyIO(&Joystick, H3D, F4_Chase_view);            // v
+    MapKeyIO(&Joystick, H3R, F6_Weapon_to_target_view); // >
+    MapKeyIO(&Joystick, H3L, F2_Aircraft_view);         // <
+
+
+    // Countermeasures Management Switch
+    MapKeyIO(&Joystick,  H4P, TEMPO(EXEC("toggleSnapView(9);"),
+                                    EXEC("tempSnapView(9);"), 300));
+    MapKeyRIO(&Joystick, H4P,       EXEC("releaseTempSnapView(9);"));
+
+    MapKeyIO(&Joystick,  H4U, TEMPO(EXEC("toggleSnapView(4);"),
+                                    EXEC("tempSnapView(4);"), 300));
+    MapKeyRIO(&Joystick, H4U,       EXEC("releaseTempSnapView(4);"));
+
+    MapKeyIO(&Joystick,  H4L, TEMPO(EXEC("toggleSnapView(1);"),
+                                    EXEC("tempSnapView(1);"), 300));
+    MapKeyRIO(&Joystick, H4L,       EXEC("releaseTempSnapView(1);"));
+
+    MapKeyIO(&Joystick,  H4R, TEMPO(EXEC("toggleSnapView(6);"),
+                                    EXEC("tempSnapView(6);"), 300));
+    MapKeyRIO(&Joystick, H4R,       EXEC("releaseTempSnapView(6);"));
+
+    MapKeyIO(&Joystick,  H4D, TEMPO(EXEC("toggleSnapView(3);"),
+                                    EXEC("tempSnapView(3);"), 300));
+    MapKeyRIO(&Joystick, H4D,       EXEC("releaseTempSnapView(3);"));
+
+
+    // Throttle **************************************************************
+
+    // Axes
+    MapAxis(&Throttle, THR_LEFT, DX_ZROT_AXIS, AXIS_REVERSED, MAP_ABSOLUTE);
+    MapAxis(&Throttle, THR_RIGHT, DX_Z_AXIS, AXIS_REVERSED, MAP_ABSOLUTE);
+
+    SetJCurve(&Throttle, THR_RIGHT, 80, 96);
+    SetJCurve(&Throttle, THR_LEFT,  80, 96);
+
+    // Throttle Friction Control
+    // Landing gear on 'I' layer
+    // LED3 blinking when gear is down
+    KeyAxis(&Throttle, THR_FC, 'i', AXMAP2(
+        LIST(0,30,70,100),
+        LandingGearUpCustom,
+        0,
+        LandingGearDownCustom
+    ));
+
+    // Axis / layers
+    MapKey(&Joystick, S4, EXEC(
+        // Lock Friction Control axis on 'I' layer
+        "LockAxis(&Throttle, THR_FC, 1);"
+
+        // Use Slew Control as mouse
+        "MapAxis(&Throttle, SCX, MOUSE_X_AXIS, AXIS_NORMAL, MAP_RELATIVE);"
+        "MapAxis(&Throttle, SCY, MOUSE_Y_AXIS, AXIS_NORMAL, MAP_RELATIVE);"
+        "SetSCurve(&Throttle, SCX, 0, 15, 0, 3, -5);"
+        "SetSCurve(&Throttle, SCY, 0, 15, 0, 3, -5);"
+    ));
+    MapKeyR(&Joystick, S4, EXEC(
+        // Unlock Friction Control on 'O' layer
+        "LockAxis(&Throttle, THR_FC, 0);"
+
+        // Reset Slew Control axis assignment
+        "MapAxis(&Throttle, SCX, DX_XROT_AXIS);"
+        "MapAxis(&Throttle, SCY, DX_YROT_AXIS);"
+        "SetSCurve(&Throttle, SCX, 0, 0, 0, 0, 0);"
+        "SetSCurve(&Throttle, SCY, 0, 0, 0, 0, 0);"
+    ));
+
+    // Mouse control (Slew control press / Coolie Hat)
+    MapKeyIO(&Throttle, SC, MOUSE_LEFT);
+    MapKeyIO(&Throttle, CSD, MOUSE_LEFT);
+    MapKeyIO(&Throttle, CSU, MOUSE_RIGHT);
+
+    // Mic Switch
+    MapKeyIO(&Throttle, MSU, PULSE+VAC_arm, PULSE+VAC_arm); // VAC arm
+
+    // Speedbrake
+    MapKey(&Throttle, SPDF, AirbrakeOffCustom);
+    MapKeyIO(&Throttle, SPDB, PULSE+Canopy_Open_Close,
+                              AirbrakeOnCustom);
+
+    // Flaps
+    MapKey(&Throttle, FLAPU, FlapsUpCustom);
+    MapKey(&Throttle, FLAPM, FlapsDownCustom);
+    MapKey(&Throttle, FLAPD, FlapsLandingCustom);
+
+    // Idle
+    MapKey(&Throttle,  IDLELON, EXEC("setEngine(Left,  Stop);"));
+    MapKeyR(&Throttle, IDLELON, EXEC("setEngine(Left,  Start);"));
+    MapKey(&Throttle,  IDLERON, EXEC("setEngine(Right, Stop);"));
+    MapKeyR(&Throttle, IDLERON, EXEC("setEngine(Right, Start);"));
+
+}
+
+
+// ****************************************************************************************************************************
+// Eventhndler
+// ****************************************************************************************************************************
+
+int EventHandle(int type, alias o, int x)
+{
+    int isShiftedCommand     = Joystick[S4];
+    int isAxisCommand        = x >= IN_POSITION_AXES & x < IN_POSITION_HAT;
+    int isSlewControlCommand = &o == &Throttle & (x == 256 | x == 257);
+
+    // Axes
+    if(isAxisCommand)
+    {
+        // Slew control as mouse
+        if (isShiftedCommand & isSlewControlCommand) {
+            //do nothing
+        }
+        // Other axes
+        else {
+            GetAxisData(&o, x);
+            if(!axdata.locked) {
+                GameOutput(&o, x, clip(AxisVal(o[x], &axdata), -AMAX, AMAX));
+            }
+        }
+    }
+    // Buttons & hats
+    else if(!Joystick[S4] | !o[x]) GameOutput(&o, x, o[x]);
+
+    DefaultMapping(&o, x);
+}
